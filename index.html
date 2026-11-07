@@ -1,0 +1,930 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chronicle Defense</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one-screen game console. Map canvas left, command panel right; stacks on narrow screens. */
+:root{
+  --ink:#11142a;        /* night over the steppe */
+  --panel:#1a1e3b;
+  --panel-2:#232850;
+  --line:#343b6e;
+  --sand:#d8b278;       /* the road */
+  --tile:#35b8a9;       /* Samarkand turquoise accent */
+  --text:#eee8da;
+  --muted:#a6abc8;
+  --good:#71c891;
+  --bad:#e66a5e;
+  --gold:#f0c75e;
+  --f-display:"Marcellus", "Trajan Pro", Georgia, serif;
+  --f-body:"Figtree", "Segoe UI", system-ui, sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+[hidden]{display:none!important}
+body{background:var(--ink);color:var(--text);font-family:var(--f-body);font-size:15px;line-height:1.45;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:12px;box-sizing:border-box}
+*,*::before,*::after{box-sizing:border-box}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--tile);outline-offset:2px}
+.app{max-width:1280px;margin:0 auto;display:grid;gap:12px}
+header.bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px}
+.brand{display:flex;flex-direction:column;margin-right:auto;min-width:0}
+.brand h1{font-family:var(--f-display);font-weight:400;font-size:26px;margin:0;letter-spacing:.02em;line-height:1.1}
+.brand span{color:var(--muted);font-size:13px}
+.stats{display:flex;gap:8px;flex-wrap:wrap}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 12px;display:flex;flex-direction:column;min-width:84px}
+.stat b{font-size:19px;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat small{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+.stat.gold b{color:var(--gold)} .stat.trade b{color:var(--good)} .stat.trade.low b{color:var(--bad)}
+.menu{display:flex;gap:6px;flex-wrap:wrap}
+.btn{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 13px;font-weight:600;font-size:14px}
+.btn:hover{border-color:var(--tile)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--tile);border-color:var(--tile);color:#08201d}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent}
+.btn.danger{border-color:var(--bad);color:var(--bad);background:transparent}
+main.play{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;align-items:start}
+.board{position:relative;min-width:0}
+canvas{display:block;width:100%;height:auto;border-radius:10px;border:1px solid var(--line);background:#0d1022;touch-action:manipulation}
+.toast{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--panel-2);border:1px solid var(--tile);border-radius:8px;padding:8px 14px;font-weight:600;font-size:14px;pointer-events:none;max-width:90%;text-align:center}
+aside.side{display:grid;gap:12px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+.card h3{font-family:var(--f-display);font-weight:400;font-size:18px;margin:0 0 8px}
+.eyebrow{text-transform:uppercase;letter-spacing:.1em;font-size:11px;color:var(--tile);font-weight:700}
+.shop{display:grid;gap:6px}
+.shop button{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+.shop button.sel{border-color:var(--tile);box-shadow:inset 0 0 0 1px var(--tile)}
+.shop button:disabled{opacity:.5}
+.shop .ico{width:34px;height:34px;border-radius:7px;display:grid;place-items:center;font-family:var(--f-display);font-size:13px;color:#0c0f20;font-weight:700}
+.shop .nm{font-weight:600;font-size:14px;line-height:1.2}
+.shop .ds{color:var(--muted);font-size:12px;line-height:1.25}
+.shop .cost{color:var(--gold);font-weight:700;font-variant-numeric:tabular-nums}
+.btn.primary .key{color:#08201d;border-color:rgba(8,32,29,.4)}
+.key{color:var(--muted);font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-left:4px}
+.sel-info p{margin:4px 0;font-size:13.5px}
+.sel-info .row{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.muted{color:var(--muted)}
+.chip{display:inline-block;border:1px solid var(--tile);color:var(--tile);border-radius:999px;font-size:11.5px;padding:1px 8px;margin:2px 4px 2px 0;font-weight:600}
+.wavebar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.wavebar .btn.primary{flex:1;padding:11px 14px;font-size:15px}
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(6,8,20,.78);display:grid;place-items:center;z-index:50;
+  padding:max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));overflow:auto}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:720px;width:100%;padding:22px 24px;max-height:100%;overflow:auto}
+.modal h2{font-family:var(--f-display);font-weight:400;font-size:26px;margin:4px 0 12px;text-wrap:balance;line-height:1.15}
+.modal p{margin:8px 0;max-width:68ch}
+.stim{background:#f1e7cf;color:#2b2416;border-radius:8px;padding:14px 16px;font-family:Georgia,"Times New Roman",serif;font-size:15.5px;line-height:1.5;margin:10px 0}
+.stim .src{display:block;font-family:var(--f-body);font-size:12.5px;color:#5d5136;margin-top:8px}
+.qtext{font-weight:600;font-size:16px}
+.choices{display:grid;gap:8px;margin-top:10px}
+.choices button{text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;grid-template-columns:26px 1fr;gap:8px;line-height:1.35}
+.choices button:hover:not(:disabled){border-color:var(--tile)}
+.choices button b{color:var(--muted)}
+.choices button.right{border-color:var(--good);background:rgba(113,200,145,.14)}
+.choices button.wrong{border-color:var(--bad);background:rgba(230,106,94,.14)}
+.choices button:disabled{cursor:default}
+.feedback{border-left:3px solid var(--tile);padding:6px 12px;margin-top:12px;background:var(--panel-2);border-radius:0 8px 8px 0}
+.feedback.ok{border-color:var(--good)} .feedback.no{border-color:var(--bad)}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 6px}
+.tag{font-size:11.5px;border-radius:999px;padding:1px 9px;background:var(--panel-2);border:1px solid var(--line);color:var(--muted)}
+textarea,input[type=password],input[type=text]{width:100%;background:#0f1229;border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;padding:9px 10px}
+textarea{min-height:70px;resize:vertical}
+label.part{display:block;font-weight:600;margin:12px 0 4px}
+.rubric{background:var(--panel-2);border-radius:8px;padding:10px 12px;margin:8px 0}
+.rubric ul{margin:6px 0 4px;padding-left:18px}
+.rubric li{margin:2px 0;font-size:14px}
+.yours{white-space:pre-wrap;font-size:14px;color:var(--muted);border-left:2px solid var(--line);padding-left:10px;margin:6px 0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+table.stats{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+table.stats th,table.stats td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+table.stats th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+.tablewrap{overflow-x:auto}
+.meter{height:8px;background:var(--panel-2);border-radius:99px;overflow:hidden;min-width:60px}
+.meter i{display:block;height:100%;background:var(--tile)}
+.stars{font-size:34px;color:var(--gold);letter-spacing:6px}
+.levelcard{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--panel-2);display:grid;gap:4px}
+.levelcard.locked{opacity:.55}
+ul.how{padding-left:18px;margin:8px 0}
+ul.how li{margin:4px 0}
+@media (max-width:900px){main.play{grid-template-columns:1fr}}
+@media (max-width:520px){.brand h1{font-size:22px}.modal{padding:16px}.modal h2{font-size:22px}.stat{min-width:70px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="brand"><h1>Chronicle Defense</h1><span id="levelName">Unit 2 · The Silk Roads, c. 1320</span></div>
+    <div class="stats">
+      <div class="stat trade" id="tradeBox"><small>Trade</small><b id="trade">20</b></div>
+      <div class="stat gold"><small>Gold</small><b id="gold">0</b></div>
+      <div class="stat"><small>Wave</small><b id="wave">0/10</b></div>
+    </div>
+    <nav class="menu">
+      <button class="btn ghost" id="codexBtn">Codex</button>
+      <button class="btn ghost" id="progressBtn">Progress</button>
+      <button class="btn ghost" id="settingsBtn">Settings</button>
+      <button class="btn ghost" id="menuBtn">Menu</button>
+    </nav>
+  </header>
+
+  <main class="play">
+    <div class="board">
+      <canvas id="cv" width="960" height="576" aria-label="Game map of the Silk Roads"></canvas>
+      <div class="toast" id="toast" hidden></div>
+    </div>
+    <aside class="side">
+      <div class="card">
+        <div class="wavebar">
+          <button class="btn primary" id="startBtn">Start wave 1 <span class="key">Space</span></button>
+          <button class="btn" id="speedBtn" title="Game speed">1×</button>
+        </div>
+        <div class="wavebar" style="margin-top:8px">
+          <button class="btn" id="studyBtn" style="flex:1">Study for gold (+25)</button>
+        </div>
+        <p class="muted" id="hint" style="margin:8px 0 0;font-size:13px">Place a few towers, then start the wave. You answer one exam question before each wave.</p>
+      </div>
+      <div class="card">
+        <h3>Build</h3>
+        <div class="shop" id="shop"></div>
+      </div>
+      <div class="card sel-info" id="selInfo" hidden></div>
+    </aside>
+  </main>
+</div>
+
+<div class="overlay" id="overlay" hidden><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
+
+<script>
+(() => {
+"use strict";
+// ---------- constants ----------
+const COLS = 20, ROWS = 12, T = 48, W = COLS * T, H = ROWS * T;
+const SAVE_KEY = "chronicle-defense-save-v1", KEY_KEY = "chronicle-defense-apikey", SNAP_KEY = "chronicle-defense-run-v1";
+const MODEL = "claude-sonnet-5-5";
+const LEVEL_ID = "u2";
+const PATH = [[20.5,2.5],[15.5,2.5],[15.5,6.5],[18.5,6.5],[18.5,9.5],[11.5,9.5],[11.5,3.5],[6.5,3.5],[6.5,8.5],[2.5,8.5],[2.5,5.5],[-0.6,5.5]].map(([x,y]) => ({x:x*T, y:y*T}));
+const CITIES = [
+  {n:"Khanbaliq", sub:"(Beijing) start", x:19.2, y:1.2},
+  {n:"Kamul", x:15.5, y:1.5},
+  {n:"Almaliq", x:17, y:5.6},
+  {n:"Otrar", x:15, y:10.6},
+  {n:"Urgench", x:11.5, y:2.6},
+  {n:"Sarai", x:6.5, y:9.6},
+  {n:"Astrakhan", x:2.5, y:9.6},
+  {n:"Tana", sub:"Black Sea", x:1.0, y:4.5}
+];
+
+const TOWERS = {
+  yam:   {key:"1", name:"Yam Station", short:"YAM", color:"#e9c46a", cost:50, dmg:7, rate:0.38, range:135, kind:"shot",
+          role:"Fast shots, long range",
+          hist:"The Mongol Empire ran a relay network of post stations called the yam, where riders changed horses. It carried messages and officials quickly and helped the Khans control the roads."},
+  garrison: {key:"2", name:"Mongol Garrison", short:"GAR", color:"#e76f51", cost:80, dmg:30, rate:1.05, range:100, kind:"shot",
+          role:"Heavy hits, short range",
+          hist:"Mongol armies policed the routes they conquered. When most of Eurasia sat under Mongol rule, travel was safer than before. Historians call this the Pax Mongolica (Mongol peace)."},
+  inn:   {key:"3", name:"Caravanserai", short:"INN", color:"#8ecae6", cost:60, dmg:0, rate:0, range:95, kind:"slow", slow:0.45,
+          role:"Slows every threat nearby",
+          hist:"Roadside inns where merchants, camels and goods could rest behind walls. They made long journeys less risky and grew into small trading hubs along the Silk Roads."},
+  rocket:{key:"4", name:"Gunpowder Battery", short:"GUN", color:"#c77dff", cost:120, dmg:24, rate:1.6, range:120, kind:"splash", splash:55,
+          role:"Explosions hit groups",
+          hist:"Gunpowder was invented in China. Mongol armies brought Chinese gunpowder specialists on campaign, and the technology spread west across Eurasia."},
+  bank:  {key:"5", name:"Paper Money Exchange", short:"$", color:"#90be6d", cost:90, dmg:0, rate:0, range:0, kind:"bank", income:20,
+          role:"+20 gold after every wave",
+          hist:"Yuan China printed paper money, and merchants across Afro-Eurasia used credit such as bills of exchange. Traders no longer had to haul heavy coins over long distances."}
+};
+const COMBOS = {
+  pax:  {a:"yam", b:"garrison", name:"Pax Mongolica", effect:"Both towers deal 30% more damage.",
+         why:"Cause and effect: Mongol control of the routes (garrisons) plus fast communication (the yam) made travel across Eurasia safer, so long-distance trade increased."},
+  boom: {a:"inn", b:"bank", name:"Commercial boom", effect:"The exchange earns 15 extra gold each wave.",
+         why:"Cause and effect: safe places to stop and easy credit lowered the cost and risk of trade, so merchants traded more and cities like Samarkand and Kashgar grew."},
+  tech: {a:"rocket", b:"garrison", name:"Technology transfer", effect:"The battery's blasts are 35% wider and 15% stronger.",
+         why:"Cause and effect: Mongol conquests moved people and know-how across Eurasia, which spread Chinese technologies such as gunpowder westward."}
+};
+const ENEMIES = {
+  bandit:   {name:"Bandits", hp:30, speed:68, reward:4, leak:1, r:9, color:"#f4a261"},
+  raiders:  {name:"Raiders", hp:85, speed:50, reward:7, leak:2, r:12, color:"#e63946"},
+  storm:    {name:"Sandstorm", hp:230, speed:30, reward:12, leak:3, r:16, color:"#d4a373"},
+  plague:   {name:"The Black Death", hp:4200, speed:24, reward:0, leak:15, r:24, color:"#2d6a4f", boss:true}
+};
+const WAVES = [
+  [["bandit",8]],
+  [["bandit",12]],
+  [["bandit",8],["raiders",4]],
+  [["raiders",10]],
+  [["bandit",10],["raiders",6],["storm",1]],
+  [["raiders",8],["storm",3]],
+  [["bandit",16],["raiders",6]],
+  [["raiders",10],["storm",5]],
+  [["bandit",18],["raiders",10],["storm",4]],
+  [["raiders",6],["plague",1],["raiders",8]]
+];
+const SAQ_WAVES = {5:"saq1", 10:"saq2"};
+
+// ---------- question bank: Unit 2, written in AP format for practice (not official College Board items) ----------
+const POLO = {text:"The Great Khan has his money made from the inner bark of mulberry trees, pressed into sheets and cut into pieces of different sizes. These pieces are issued with as much ceremony and authority as if they were pure gold or silver, and the Khan's officials stamp them with his seal. All his subjects accept them as payment, and merchants from abroad exchange their goods for them.", src:"Adapted from Marco Polo, a Venetian merchant, describing Yuan China in his book of travels, c. 1300"};
+const BATTUTA = {text:"In every city I reached, the Muslim judges and scholars received me as a guest. Because I had studied Islamic law, the Sultan of Delhi appointed me a judge, and later I served as a judge in the Maldive Islands as well.", src:"Adapted from Ibn Battuta, a Moroccan scholar, describing his travels of the 1320s–1340s"};
+const QUESTIONS = [
+ {id:"q1", topic:"2.1 Silk Roads", skill:"Sourcing", stim:POLO,
+  q:"The passage best illustrates which development in Afro-Eurasian trade in this period?",
+  c:["The use of paper money and state-backed currency to make commerce easier","The decline of trade after the Mongol conquests","European merchants taking control of trade in East Asia","The replacement of trade with a system of forced tribute"], a:0,
+  ex:"Polo describes paper money backed by the Khan's authority. New financial tools like paper money and bills of exchange are a key Unit 2 development that made trade easier."},
+ {id:"q2", topic:"2.1 Silk Roads", skill:"Sourcing", stim:POLO,
+  q:"Marco Polo's account was most likely written for which audience?",
+  c:["Yuan tax officials who printed the money","European readers who knew little about China","Chinese merchants learning to use paper money","Mongol soldiers stationed on the Silk Roads"], a:1,
+  ex:"Polo wrote for Europeans. That is why he explains something ordinary in China (paper money) as an amazing novelty. Asking 'who is the audience?' is the sourcing skill the exam tests."},
+ {id:"q3", topic:"2.1 Silk Roads", skill:"Causation",
+  q:"Caravanserai along the Silk Roads were important to trade mainly because they",
+  c:["served as religious schools for Buddhist monks","were naval bases that protected merchant ships","gave merchants safe lodging, supplies and a place to trade on long journeys","were checkpoints used to keep foreign merchants out"], a:2,
+  ex:"Caravanserai were walled roadside inns. They lowered the risk and cost of long overland trips, which helped trade grow."},
+ {id:"q4", topic:"2.1 Silk Roads", skill:"Causation",
+  q:"Which best explains why the Silk Roads mostly carried luxury goods such as silk and porcelain?",
+  c:["Overland transport was slow and costly, so only high-value, lightweight goods were profitable","Governments banned the trade of everyday goods","Luxury goods were the only goods produced in Asia","Ships had not yet been invented"], a:0,
+  ex:"Carrying goods by camel over thousands of miles was expensive. Only goods worth a lot per pound, like silk, made the trip pay off. Bulk goods went by sea."},
+ {id:"q5", topic:"2.2 Mongol Empire", skill:"Causation",
+  q:"Which best explains why trade across Eurasia expanded in the 1200s and 1300s?",
+  c:["The spread of the Black Death opened new markets","Mongol rule unified much of Eurasia and protected merchants on the routes","European navies took control of the Indian Ocean","The collapse of China ended competition from Chinese merchants"], a:1,
+  ex:"The Mongols united a huge area under one set of rulers, policed the roads and favoured merchants. This 'Pax Mongolica' made overland trade safer and cheaper."},
+ {id:"q6", topic:"2.5 Cultural effects", skill:"Contextualization", stim:BATTUTA,
+  q:"Ibn Battuta's experience most directly reflects which broader development?",
+  c:["The spread of Islam created networks linking Muslim communities across Afro-Eurasia","The Mongols forced all merchants to convert to Buddhism","European states sponsored voyages of exploration","Most societies in Afro-Eurasia were isolated from one another"], a:0,
+  ex:"Battuta could travel thousands of miles and still find a shared religion, law and language of scholarship. The spread of Islam is the context that made his travels possible."},
+ {id:"q7", topic:"2.3 Indian Ocean", skill:"Developments and processes",
+  q:"Merchants in the Indian Ocean relied on knowledge of the monsoon winds mainly to",
+  c:["power water mills in port cities","time their voyages so they sailed with the seasonal winds","predict where pirates would attack","decide which crops to plant"], a:1,
+  ex:"The monsoons blow one way for part of the year and reverse later. Sailors timed voyages to ride them out and back, which made Indian Ocean trade predictable."},
+ {id:"q8", topic:"2.3 Indian Ocean", skill:"Causation",
+  q:"The lateen sail, the astrolabe and the magnetic compass had which shared effect in the period 1200–1450?",
+  c:["They allowed European empires to conquer the Americas","They made long-distance sea travel more reliable and helped maritime trade grow","They replaced the need for trade ports","They were used mainly in overland caravan trade"], a:1,
+  ex:"Better sails and navigation tools made sea trade safer and more predictable, so Indian Ocean trade expanded. (The conquest of the Americas comes later, in Unit 4.)"},
+ {id:"q9", topic:"2.3 Indian Ocean", skill:"Causation",
+  q:"East African city-states such as Kilwa grew wealthy in this period mainly because they",
+  c:["conquered large inland empires","linked the African interior's gold and ivory to Indian Ocean trade","were colonies of the Ming dynasty","produced silk for export to Europe"], a:1,
+  ex:"The Swahili city-states were middlemen. Gold, ivory and other goods from the interior passed through their ports to Arab, Persian and Indian merchants."},
+ {id:"q10", topic:"2.3 Indian Ocean", skill:"Making connections",
+  q:"Diasporic merchant communities, such as Arab merchants living in East African ports or Chinese merchants in Southeast Asia, most commonly",
+  c:["kept themselves completely separate from local people","introduced their own customs while also adopting local ones","forced local people to adopt their language","ended local trade in the regions where they settled"], a:1,
+  ex:"Merchant communities living abroad mixed cultures. On the Swahili coast, African and Arab influences combined in the Swahili language and culture."},
+ {id:"q11", topic:"2.3 Indian Ocean", skill:"Developments and processes",
+  q:"The Ming admiral Zheng He's voyages (1405–1433) were mainly intended to",
+  c:["establish Chinese colonies in East Africa","find a sea route to the Americas","show Ming power and bring more states into China's tribute system","spread Buddhism to the Middle East"], a:2,
+  ex:"Zheng He's huge fleets displayed Ming wealth and power and collected tribute. They did not set up colonies, and the voyages stopped after 1433."},
+ {id:"q12", topic:"2.4 Trans-Saharan", skill:"Causation",
+  q:"The development of the camel saddle affected trans-Saharan trade mainly by",
+  c:["allowing camels to carry heavier loads across the desert, which expanded trade","replacing camels with horses for desert travel","ending the trade in salt","making sea routes around Africa unnecessary"], a:0,
+  ex:"Better saddles let camels carry more over long distances, which made desert caravans more profitable and helped trade across the Sahara expand."},
+ {id:"q13", topic:"2.4 Trans-Saharan", skill:"Causation",
+  q:"The Mali Empire grew powerful in the 1300s largely because it",
+  c:["controlled and taxed the trans-Saharan trade in gold and salt","conquered Egypt and the Middle East","was protected by the Mongol Empire","exported silk to China"], a:0,
+  ex:"Mali sat between the gold fields of West Africa and the salt mines of the Sahara. Taxing that trade made its rulers rich."},
+ {id:"q14", topic:"2.4 Trans-Saharan", skill:"Contextualization",
+  q:"Mansa Musa's pilgrimage to Mecca in 1324 is significant because it",
+  c:["started the spread of Christianity in West Africa","displayed Mali's wealth and strengthened its ties to the wider Islamic world","led to Mali's conquest by the Ottomans","was the first contact between Africa and Europe"], a:1,
+  ex:"Musa travelled with huge amounts of gold, which drew attention across the Mediterranean world. He returned with scholars and architects, linking Mali more closely to the Islamic world."},
+ {id:"q15", topic:"2.6 Environmental effects", skill:"Causation",
+  q:"Champa rice, introduced to China from Southeast Asia, most directly led to",
+  c:["a decline in China's population","larger food supplies that supported population growth in China","the end of Chinese trade with Southeast Asia","famine across East Asia"], a:1,
+  ex:"Champa rice ripened quickly and resisted drought, so farmers could grow more than one crop a year. More food supported a larger population."},
+ {id:"q16", topic:"2.6 Environmental effects", skill:"Causation",
+  q:"The Black Death spread across Afro-Eurasia in the 1300s mainly because",
+  c:["trade routes connected distant regions, carrying infected people, rats and fleas","European explorers brought it from the Americas","it was spread on purpose by the Ming dynasty","it only affected isolated rural villages"], a:0,
+  ex:"The same networks that carried silk and spices carried disease. The plague moved along the trade routes from Central Asia to the Black Sea, then to Europe, the Middle East and North Africa."},
+ {id:"q17", topic:"2.6 Environmental effects", skill:"Causation",
+  q:"Which was a major effect of the Black Death in the societies it struck?",
+  c:["Rapid population growth","A sharp drop in population that caused labour shortages","The immediate end of all long-distance trade","The rise of the Mongol Empire"], a:1,
+  ex:"Plague killed a huge share of the population in many regions. With fewer workers, labour became scarce and, in places like Western Europe, surviving workers could demand higher wages."},
+ {id:"q18", topic:"2.5 Cultural effects", skill:"Making connections",
+  q:"As Buddhism spread from India into China along the Silk Roads, it blended with Confucian and Daoist ideas. This is an example of",
+  c:["syncretism, the blending of beliefs from different cultures","the rejection of foreign religions","a religion spreading only by military conquest","the decline of trade between India and China"], a:0,
+  ex:"Syncretism means blending. Chinese Buddhism took on local ideas, which helped it win followers. Expect the word on the exam."},
+ {id:"q19", topic:"2.7 Comparison", skill:"Comparison",
+  q:"Compared with Silk Roads trade, Indian Ocean trade in the period 1200–1450 was better able to",
+  c:["avoid all contact between cultures","carry large amounts of bulk goods, because ships carried far more than caravans","operate without merchants","trade only in luxury goods"], a:1,
+  ex:"A ship holds far more than a camel train, so the Indian Ocean carried everyday bulk goods like textiles, rice and timber as well as luxuries."},
+ {id:"q20", topic:"2.7 Comparison", skill:"Continuity and change",
+  q:"Which was a continuity in Afro-Eurasian trade from 1200 to 1450?",
+  c:["Trade networks kept linking China, India, the Middle East and East Africa even as empires rose and fell","Europeans controlled the main trade routes throughout the period","Long-distance trade stopped entirely after the Mongols","Trade happened only overland, never by sea"], a:0,
+  ex:"A continuity is something that stayed the same. Rulers changed, but the networks kept connecting these regions across the whole period."},
+ {id:"q21", topic:"2.2 Mongol Empire", skill:"Causation",
+  q:"Gunpowder technology spread from China to Southwest Asia and Europe in this period largely through",
+  c:["Portuguese sea voyages","Mongol conquests and the exchange networks they controlled","the trans-Saharan trade","the Columbian Exchange"], a:1,
+  ex:"The Mongols used Chinese experts and moved people and technology across their empire. That carried gunpowder west. The Portuguese voyages and the Columbian Exchange come later."},
+ {id:"q22", topic:"2.2 Mongol Empire", skill:"Continuity and change",
+  q:"The Mongol rulers of the Ilkhanate in Persia eventually",
+  c:["forced Persians to adopt Mongol religion","converted to Islam and adopted many Persian customs and officials","moved their capital to Mongolia","banned trade with China"], a:1,
+  ex:"Ruler Ghazan converted to Islam in 1295. Like other Mongol khanates, the Ilkhanate adapted to the culture of the people it ruled. That is change and continuity at once."}
+];
+const SAQS = {
+ saq1: {title:"Short answer: the road to Cathay", reward:"+50 gold per point",
+  stim:{text:"The road you travel from Tana to Cathay is perfectly safe, whether by day or by night, according to what the merchants say who have used it.", src:"Adapted from Francesco Pegolotti, an Italian banker, in a handbook of advice for merchants, c. 1340"},
+  parts:[
+   {p:"a", q:"Identify ONE reason the route described in the passage was considered safe in this period.",
+    ok:["Mongol control of most of the route (the Pax Mongolica)","Mongol armies or officials protecting merchants and roads","The yam relay system or a network of caravanserai along the route"]},
+   {p:"b", q:"Explain ONE way the Mongol Empire made it easier to exchange goods or ideas across Eurasia.",
+    ok:["Unifying a huge territory under one rule reduced the number of borders, tolls and wars merchants faced","Protecting and favouring merchants, so trade was safer and more profitable","Moving skilled people and technologies (such as gunpowder or printing) across the empire","The yam system improved communication and travel"]},
+   {p:"c", q:"Explain ONE reason the author's purpose (writing a handbook for merchants) might affect how reliable the passage is about the route's safety.",
+    ok:["He relies on what other merchants told him, not his own experience","A handbook meant to encourage trade might exaggerate how safe the route is","He wants readers to use the route, so he may leave out dangers","Merchants had an interest in describing the route positively"]}
+  ]},
+ saq2: {title:"Short answer: the Black Death", reward:"Weakens the boss by 15% per point, plus 30 gold per point",
+  stim:null,
+  parts:[
+   {p:"a", q:"Identify ONE effect of the Black Death on Afro-Eurasian societies in the 1300s.",
+    ok:["Massive population loss","Labour shortages or higher wages for surviving workers","Trade and economic disruption","Social or religious upheaval, such as persecution of minorities or a loss of trust in authorities"]},
+   {p:"b", q:"Explain how trade networks contributed to the spread of the Black Death.",
+    ok:["Merchants, caravans and ships moved infected people, rats and fleas along the routes","The Mongol-era connections linked Central Asia to the Black Sea ports, and from there ships carried plague to the Mediterranean","Busy trading cities and ports packed people together, so the disease spread quickly once it arrived"]},
+   {p:"c", q:"Explain ONE similarity OR ONE difference between Silk Roads trade and Indian Ocean trade in the period 1200–1450.",
+    ok:["Similarity: both spread religions, technologies and diseases, not just goods","Similarity: both relied on merchant communities living far from home","Difference: the Indian Ocean carried larger volumes and bulk goods, while the Silk Roads mainly carried luxuries","Difference: Indian Ocean trade depended on monsoon winds and ships; Silk Roads trade depended on caravans and caravanserai"]}
+  ]}
+};
+
+// ---------- storage ----------
+function load(k, fallback){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : fallback; }catch(e){ return fallback; } }
+function store(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function drop(k){ try{ localStorage.removeItem(k); }catch(e){} }
+function freshSave(){ return {version:1, levels:{}, q:{}, qCount:0, saq:[], combos:[], runs:0, created:Date.now()}; }
+let SAVE = Object.assign(freshSave(), load(SAVE_KEY, {}));
+function persist(){ store(SAVE_KEY, SAVE); }
+function getKey(){ try{ return localStorage.getItem(KEY_KEY) || ""; }catch(e){ return ""; } }
+
+// ---------- path geometry ----------
+const SEGS = []; let PATH_LEN = 0;
+for(let i=0;i<PATH.length-1;i++){ const a=PATH[i], b=PATH[i+1], len=Math.hypot(b.x-a.x,b.y-a.y); SEGS.push({a,b,len,start:PATH_LEN}); PATH_LEN+=len; }
+function pointAt(d){ for(const s of SEGS){ if(d <= s.start + s.len){ const t=(d-s.start)/s.len; return {x:s.a.x+(s.b.x-s.a.x)*t, y:s.a.y+(s.b.y-s.a.y)*t}; } } const l=PATH[PATH.length-1]; return {x:l.x,y:l.y}; }
+const PATH_TILES = new Set();
+for(let d=0; d<=PATH_LEN; d+=8){ const p=pointAt(d); const c=Math.floor(p.x/T), r=Math.floor(p.y/T); if(c>=0&&c<COLS&&r>=0&&r<ROWS) PATH_TILES.add(c+","+r); }
+
+// ---------- run state ----------
+let S;
+function newRun(){
+  S = {wave:0, gold:200, trade:20, towers:[], enemies:[], fx:[], queue:[], spawnT:0, running:false, studyLeft:2,
+       runRight:0, runAsked:0, bossMult:1, speed:1, recent:[], nextId:1};
+  SAVE.runs++; persist();
+  drop(SNAP_KEY);
+  selected = null; placing = null;
+  computeSynergy(false); renderShop(); renderSel(); updateHUD();
+}
+function snapshot(){
+  store(SNAP_KEY, {level:LEVEL_ID, wave:S.wave, gold:S.gold, trade:S.trade, runRight:S.runRight, runAsked:S.runAsked,
+    towers:S.towers.map(t=>({type:t.type,c:t.c,r:t.r,level:t.level,spent:t.spent})), saved:Date.now()});
+}
+function restore(sn){
+  newRun(); SAVE.runs--; persist();
+  Object.assign(S, {wave:sn.wave, gold:sn.gold, trade:sn.trade, runRight:sn.runRight||0, runAsked:sn.runAsked||0});
+  S.towers = sn.towers.map(t => ({...t, id:S.nextId++, cd:0, aim:0}));
+  store(SNAP_KEY, sn);
+  computeSynergy(false); renderShop(); renderSel(); updateHUD();
+}
+
+// ---------- towers ----------
+function towerAt(c,r){ return S.towers.find(t=>t.c===c&&t.r===r); }
+function stats(t){
+  const b = TOWERS[t.type], lv = [1,1.55,2.2][t.level-1];
+  let dmg=b.dmg*lv, range=b.range*(1+0.1*(t.level-1)), splash=b.splash||0, slow=b.slow?Math.min(0.65,b.slow+0.08*(t.level-1)):0, income=(b.income||0)*(1+0.5*(t.level-1));
+  if(t.syn.has("pax") && (t.type==="yam"||t.type==="garrison")) dmg*=1.3;
+  if(t.syn.has("tech") && t.type==="rocket"){ splash*=1.35; dmg*=1.15; }
+  if(t.syn.has("boom") && t.type==="bank") income+=15;
+  return {dmg, range, splash, slow, income, rate:b.rate};
+}
+function computeSynergy(announce=true){
+  for(const t of S.towers) t.syn = new Set();
+  for(let i=0;i<S.towers.length;i++) for(let j=i+1;j<S.towers.length;j++){
+    const a=S.towers[i], b=S.towers[j];
+    if(Math.abs(a.c-b.c)>1 || Math.abs(a.r-b.r)>1) continue;
+    for(const [id,cb] of Object.entries(COMBOS)){
+      if((a.type===cb.a&&b.type===cb.b)||(a.type===cb.b&&b.type===cb.a)){
+        a.syn.add(id); b.syn.add(id);
+        if(announce && !SAVE.combos.includes(id)){ SAVE.combos.push(id); persist(); discover(id); }
+      }
+    }
+  }
+}
+function upgradeCost(t){ return Math.round(TOWERS[t.type].cost*0.8*t.level); }
+
+// ---------- canvas ----------
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const bg = document.createElement("canvas"); bg.width=W; bg.height=H;
+function paintBg(){
+  const g = bg.getContext("2d"); g.clearRect(0,0,W,H);
+  const grd = g.createLinearGradient(0,0,W,H); grd.addColorStop(0,"#171b36"); grd.addColorStop(1,"#0f1226");
+  g.fillStyle=grd; g.fillRect(0,0,W,H);
+  let seed=7; const rnd=()=>{ seed=(seed*16807)%2147483647; return seed/2147483647; };
+  for(let i=0;i<900;i++){ g.fillStyle=`rgba(216,178,120,${0.03+rnd()*0.05})`; g.fillRect(rnd()*W, rnd()*H, 1+rnd()*2, 1+rnd()*2); }
+  // dunes / ridges
+  g.strokeStyle="rgba(216,178,120,0.07)"; g.lineWidth=1.2;
+  for(let i=0;i<26;i++){ const x=rnd()*W, y=rnd()*H, w=40+rnd()*90; g.beginPath(); g.moveTo(x,y); g.quadraticCurveTo(x+w/2,y-10-rnd()*10,x+w,y); g.stroke(); }
+  // Black Sea hint on the left
+  g.fillStyle="rgba(53,184,169,0.10)"; g.beginPath(); g.ellipse(-30, 4.4*T, 90, 120, 0, 0, Math.PI*2); g.fill();
+  // grid
+  g.strokeStyle="rgba(255,255,255,0.025)"; g.lineWidth=1;
+  for(let c=0;c<=COLS;c++){ g.beginPath(); g.moveTo(c*T,0); g.lineTo(c*T,H); g.stroke(); }
+  for(let r=0;r<=ROWS;r++){ g.beginPath(); g.moveTo(0,r*T); g.lineTo(W,r*T); g.stroke(); }
+  // road
+  g.lineCap="round"; g.lineJoin="round";
+  const road = (w,col)=>{ g.strokeStyle=col; g.lineWidth=w; g.beginPath(); g.moveTo(PATH[0].x,PATH[0].y); for(const p of PATH) g.lineTo(p.x,p.y); g.stroke(); };
+  road(40,"#6e5530"); road(32,"#b8925a"); road(2,"rgba(255,240,210,0.25)");
+  g.setLineDash([2,10]); road(3,"rgba(80,55,25,0.55)"); g.setLineDash([]);
+  // cities
+  for(const c of CITIES){
+    const x=c.x*T, y=c.y*T;
+    g.fillStyle="#35b8a9"; g.beginPath(); g.arc(x,y,4,0,Math.PI*2); g.fill();
+    g.font="15px Marcellus, Georgia, serif"; g.fillStyle="rgba(238,232,218,0.9)"; g.textAlign="center"; g.fillText(c.n, x, y-9);
+    if(c.sub){ g.font="11px Figtree, sans-serif"; g.fillStyle="rgba(166,171,200,0.9)"; g.fillText(c.sub, x, y+16); }
+  }
+  g.textAlign="left"; g.font="12px Figtree, sans-serif"; g.fillStyle="rgba(166,171,200,0.7)";
+  g.fillText("Threats travel west along the road. Every one that reaches Tana costs you Trade.", 12, H-12);
+}
+paintBg();
+if(document.fonts){ document.fonts.ready.then(paintBg).catch(()=>{}); }
+
+let hover = null, placing = null, selected = null;
+function canvasPos(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*W/r.width, y:(e.clientY-r.top)*H/r.height}; }
+cv.addEventListener("mousemove", e=>{ const p=canvasPos(e); hover={c:Math.floor(p.x/T), r:Math.floor(p.y/T)}; });
+cv.addEventListener("mouseleave", ()=>{ hover=null; });
+cv.addEventListener("contextmenu", e=>{ e.preventDefault(); placing=null; renderShop(); });
+cv.addEventListener("click", e=>{
+  const p=canvasPos(e), c=Math.floor(p.x/T), r=Math.floor(p.y/T);
+  hover={c,r};
+  const existing = towerAt(c,r);
+  if(placing){
+    const b=TOWERS[placing];
+    if(existing || PATH_TILES.has(c+","+r)){ toast("You can't build on the road or on another tower."); return; }
+    if(S.gold < b.cost){ toast("Not enough gold. Answer a study question to earn more."); return; }
+    S.gold -= b.cost;
+    const t = {id:S.nextId++, type:placing, c, r, level:1, spent:b.cost, cd:0, aim:0, syn:new Set()};
+    S.towers.push(t); computeSynergy(true);
+    if(S.gold < b.cost) placing = null;
+    selected = null; renderShop(); renderSel(); updateHUD();
+    return;
+  }
+  selected = existing ? existing.id : null; renderSel();
+});
+
+function draw(){
+  ctx.drawImage(bg,0,0);
+  // synergy links
+  for(let i=0;i<S.towers.length;i++) for(let j=i+1;j<S.towers.length;j++){
+    const a=S.towers[i], b=S.towers[j];
+    if(Math.abs(a.c-b.c)>1||Math.abs(a.r-b.r)>1) continue;
+    const shared=[...a.syn].some(s=>b.syn.has(s)&&(COMBOS[s].a===a.type||COMBOS[s].b===a.type)&&(COMBOS[s].a===b.type||COMBOS[s].b===b.type));
+    if(!shared) continue;
+    ctx.strokeStyle="rgba(53,184,169,0.8)"; ctx.lineWidth=3; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(a.c*T+T/2,a.r*T+T/2); ctx.lineTo(b.c*T+T/2,b.r*T+T/2); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // selected range
+  const sel = S.towers.find(t=>t.id===selected);
+  if(sel){ const st=stats(sel); if(st.range){ ctx.fillStyle="rgba(53,184,169,0.10)"; ctx.strokeStyle="rgba(53,184,169,0.6)"; ctx.beginPath(); ctx.arc(sel.c*T+T/2, sel.r*T+T/2, st.range, 0, Math.PI*2); ctx.fill(); ctx.stroke(); } }
+  // towers
+  for(const t of S.towers){
+    const b=TOWERS[t.type], x=t.c*T, y=t.r*T;
+    ctx.fillStyle="rgba(0,0,0,0.35)"; roundRect(x+6,y+9,T-10,T-10,8); ctx.fill();
+    ctx.fillStyle=b.color; roundRect(x+4,y+4,T-8,T-8,8); ctx.fill();
+    if(t.id===selected){ ctx.strokeStyle="#fff"; ctx.lineWidth=2; roundRect(x+3,y+3,T-6,T-6,9); ctx.stroke(); }
+    ctx.fillStyle="#0c0f20"; ctx.font="bold 13px Figtree, sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(b.short, x+T/2, y+T/2-2);
+    // level pips
+    for(let i=0;i<t.level;i++){ ctx.fillStyle="#0c0f20"; ctx.beginPath(); ctx.arc(x+T/2-8+i*8, y+T-12, 2.4, 0, Math.PI*2); ctx.fill(); }
+    if(b.kind==="slow"){ const st=stats(t); ctx.strokeStyle="rgba(142,202,230,0.18)"; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(x+T/2,y+T/2,st.range,0,Math.PI*2); ctx.stroke(); }
+  }
+  ctx.textBaseline="alphabetic"; ctx.textAlign="left";
+  // placing ghost
+  if(placing && hover){
+    const b=TOWERS[placing], ok=!towerAt(hover.c,hover.r)&&!PATH_TILES.has(hover.c+","+hover.r)&&S.gold>=b.cost;
+    const x=hover.c*T, y=hover.r*T;
+    ctx.globalAlpha=0.55; ctx.fillStyle=ok?b.color:"#e66a5e"; roundRect(x+4,y+4,T-8,T-8,8); ctx.fill(); ctx.globalAlpha=1;
+    if(b.range){ ctx.strokeStyle=ok?"rgba(238,232,218,0.5)":"rgba(230,106,94,0.6)"; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.arc(x+T/2,y+T/2,b.range,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]); }
+  }
+  // enemies
+  for(const e of S.enemies){
+    const d=ENEMIES[e.type], p=pointAt(e.d);
+    if(d.boss){
+      const pulse = 1+0.08*Math.sin(performance.now()/180);
+      const g=ctx.createRadialGradient(p.x,p.y,2,p.x,p.y,d.r*1.8*pulse); g.addColorStop(0,"rgba(20,40,30,0.95)"); g.addColorStop(0.6,"rgba(45,106,79,0.7)"); g.addColorStop(1,"rgba(45,106,79,0)");
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,d.r*1.8*pulse,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#eee8da"; ctx.font="12px Figtree, sans-serif"; ctx.textAlign="center"; ctx.fillText("Black Death", p.x, p.y-d.r-14); ctx.textAlign="left";
+    } else if(e.type==="storm"){
+      const a=performance.now()/300; ctx.strokeStyle=d.color; ctx.lineWidth=3;
+      for(let k=0;k<3;k++){ ctx.beginPath(); ctx.arc(p.x,p.y,d.r-k*4,a+k,a+k+4); ctx.stroke(); }
+    } else if(e.type==="raiders"){
+      ctx.fillStyle=d.color; ctx.beginPath(); ctx.moveTo(p.x-d.r,p.y); ctx.lineTo(p.x+d.r*0.7,p.y-d.r*0.8); ctx.lineTo(p.x+d.r*0.7,p.y+d.r*0.8); ctx.closePath(); ctx.fill();
+    } else {
+      ctx.fillStyle=d.color; ctx.beginPath(); ctx.arc(p.x,p.y,d.r,0,Math.PI*2); ctx.fill();
+    }
+    if(e.slowed){ ctx.strokeStyle="rgba(142,202,230,0.9)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(p.x,p.y,d.r+4,0,Math.PI*2); ctx.stroke(); }
+    const w = d.boss?60:26, f=Math.max(0,e.hp/e.max);
+    ctx.fillStyle="rgba(0,0,0,0.6)"; ctx.fillRect(p.x-w/2,p.y-d.r-9,w,4);
+    ctx.fillStyle=f>0.5?"#71c891":f>0.25?"#f0c75e":"#e66a5e"; ctx.fillRect(p.x-w/2,p.y-d.r-9,w*f,4);
+  }
+  // effects
+  for(const f of S.fx){
+    const a=Math.max(0,f.t/f.life);
+    if(f.kind==="shot"){ ctx.strokeStyle=`rgba(255,240,200,${a})`; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(f.x1,f.y1); ctx.lineTo(f.x2,f.y2); ctx.stroke(); }
+    else if(f.kind==="boom"){ ctx.fillStyle=`rgba(199,125,255,${a*0.45})`; ctx.beginPath(); ctx.arc(f.x,f.y,f.r*(1.2-a*0.4),0,Math.PI*2); ctx.fill(); }
+    else if(f.kind==="coin"){ ctx.fillStyle=`rgba(240,199,94,${a})`; ctx.font="bold 13px Figtree, sans-serif"; ctx.fillText(f.txt, f.x, f.y-(1-a)*18); }
+  }
+}
+function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+// ---------- simulation ----------
+function update(dt){
+  if(!S.running) return;
+  // spawn
+  S.spawnT -= dt;
+  if(S.queue.length && S.spawnT<=0){
+    const type=S.queue.shift(), d=ENEMIES[type];
+    const scale = d.boss ? S.bossMult : (1 + 0.13*(S.wave));
+    const hp = Math.round(d.hp*scale);
+    S.enemies.push({type, d:0, hp, max:hp, slowed:false});
+    S.spawnT = d.boss ? 3 : (type==="storm" ? 1.6 : type==="raiders" ? 0.85 : 0.6);
+  }
+  // move
+  const slows = S.towers.filter(t=>TOWERS[t.type].kind==="slow").map(t=>({t, st:stats(t)}));
+  for(const e of S.enemies){
+    const p=pointAt(e.d); let f=1; e.slowed=false;
+    for(const s of slows){ if(Math.hypot(p.x-(s.t.c*T+T/2), p.y-(s.t.r*T+T/2)) <= s.st.range){ f=Math.min(f, 1-s.st.slow*(ENEMIES[e.type].boss?0.5:1)); e.slowed=true; } }
+    e.d += ENEMIES[e.type].speed*f*dt;
+  }
+  // leaks
+  for(const e of S.enemies){ if(e.d>=PATH_LEN && e.hp>0){ e.hp=0; e.leaked=true; S.trade-=ENEMIES[e.type].leak; toast(`${ENEMIES[e.type].name} reached Tana: −${ENEMIES[e.type].leak} Trade`); } }
+  // towers fire
+  for(const t of S.towers){
+    const b=TOWERS[t.type]; if(b.kind==="slow"||b.kind==="bank") continue;
+    t.cd -= dt; if(t.cd>0) continue;
+    const st=stats(t), tx=t.c*T+T/2, ty=t.r*T+T/2;
+    let best=null;
+    for(const e of S.enemies){ if(e.hp<=0) continue; const p=pointAt(e.d); if(Math.hypot(p.x-tx,p.y-ty)<=st.range && (!best||e.d>best.d)) best=e; }
+    if(!best) continue;
+    t.cd = st.rate;
+    const p=pointAt(best.d);
+    if(b.kind==="splash"){
+      for(const e of S.enemies){ if(e.hp<=0) continue; const q=pointAt(e.d); if(Math.hypot(q.x-p.x,q.y-p.y)<=st.splash) hit(e, st.dmg); }
+      S.fx.push({kind:"boom",x:p.x,y:p.y,r:st.splash,t:0.35,life:0.35});
+      S.fx.push({kind:"shot",x1:tx,y1:ty,x2:p.x,y2:p.y,t:0.12,life:0.12});
+    } else {
+      hit(best, st.dmg);
+      S.fx.push({kind:"shot",x1:tx,y1:ty,x2:p.x,y2:p.y,t:0.09,life:0.09});
+    }
+  }
+  S.enemies = S.enemies.filter(e=>e.hp>0);
+  for(const f of S.fx) f.t-=dt; S.fx=S.fx.filter(f=>f.t>0);
+  if(S.trade<=0){ S.trade=0; S.running=false; updateHUD(); gameOver(); return; }
+  if(!S.queue.length && !S.enemies.length) endWave();
+  updateHUD();
+}
+function hit(e,dmg){
+  if(e.hp<=0) return;
+  e.hp-=dmg;
+  if(e.hp<=0){ const d=ENEMIES[e.type]; if(d.reward){ S.gold+=d.reward; const p=pointAt(e.d); S.fx.push({kind:"coin",txt:"+"+d.reward,x:p.x,y:p.y,t:0.8,life:0.8}); } }
+}
+function beginWave(){
+  const n=S.wave+1; S.queue=[];
+  for(const [type,count] of WAVES[n-1]) for(let i=0;i<count;i++) S.queue.push(type);
+  S.spawnT=0.4; S.running=true; selected=null; renderSel(); updateHUD();
+  setHint(n===10 ? "The Black Death is coming down the road. Hold Tana!" : `Wave ${n} is on the road.`);
+}
+function endWave(){
+  S.running=false; S.wave++;
+  let income=25; for(const t of S.towers) if(t.type==="bank") income+=Math.round(stats(t).income);
+  S.gold+=income; S.studyLeft=2;
+  if(S.wave>=10){ updateHUD(); victory(); return; }
+  snapshot(); updateHUD(); renderShop();
+  toast(`Wave ${S.wave} held. +${income} gold`);
+  setHint(SAQ_WAVES[S.wave+1] ? `Next up: a short-answer question before wave ${S.wave+1}. Good answers earn big rewards.` : "Build, upgrade, or study for gold, then start the next wave.");
+}
+
+// ---------- loop ----------
+let last=performance.now();
+function frame(now){
+  let dt=Math.min(0.05,(now-last)/1000); last=now;
+  if(overlay.hidden){ const steps=S.speed; for(let i=0;i<steps;i++) update(dt); }
+  draw(); requestAnimationFrame(frame);
+}
+
+// ---------- HUD ----------
+const $ = id => document.getElementById(id);
+const overlay=$("overlay"), modal=$("modal");
+function updateHUD(){
+  $("gold").textContent=S.gold; $("trade").textContent=S.trade; $("wave").textContent=`${S.wave}/10`;
+  $("tradeBox").classList.toggle("low", S.trade<=6);
+  const sb=$("startBtn");
+  sb.disabled = S.running || S.wave>=10;
+  sb.innerHTML = S.running ? `Wave ${S.wave+1} in progress` : (S.wave>=10 ? "Level complete" : `Start wave ${S.wave+1} <span class="key">Space</span>`);
+  const st=$("studyBtn"); st.disabled = S.running || S.studyLeft<=0 || S.wave>=10;
+  st.textContent = S.studyLeft>0 ? `Study for gold (+25) · ${S.studyLeft} left` : "Study again after the next wave";
+  document.querySelectorAll(".shop button").forEach(b=>{ b.disabled = S.gold < TOWERS[b.dataset.t].cost && placing!==b.dataset.t; });
+  if(selected) renderSelLight();
+}
+function setHint(t){ $("hint").textContent=t; }
+let toastTimer=null;
+function toast(msg){ const el=$("toast"); el.textContent=msg; el.hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.hidden=true, 2400); }
+function renderShop(){
+  $("shop").innerHTML = Object.entries(TOWERS).map(([id,b])=>`
+    <button data-t="${id}" class="${placing===id?"sel":""}" title="${b.name}">
+      <span class="ico" style="background:${b.color}">${b.short}</span>
+      <span><span class="nm">${b.name}<span class="key">${b.key}</span></span><br><span class="ds">${b.role}</span></span>
+      <span class="cost">${b.cost}</span>
+    </button>`).join("");
+  document.querySelectorAll(".shop button").forEach(btn=>btn.addEventListener("click",()=>{ selectTower(btn.dataset.t); }));
+  updateHUDShop();
+}
+function updateHUDShop(){ document.querySelectorAll(".shop button").forEach(b=>{ b.disabled = S.gold < TOWERS[b.dataset.t].cost && placing!==b.dataset.t; }); }
+function selectTower(id){ placing = placing===id ? null : id; selected=null; renderSel(); renderShop(); if(placing) setHint(`Click an empty square next to the road to build a ${TOWERS[id].name}. Right-click or Esc to cancel.`); }
+function renderSel(){
+  const box=$("selInfo"); const t=S.towers.find(x=>x.id===selected);
+  if(!t){ box.hidden=true; return; }
+  box.hidden=false;
+  const b=TOWERS[t.type], st=stats(t);
+  const facts=[];
+  if(b.kind==="shot"||b.kind==="splash") facts.push(`Damage ${Math.round(st.dmg)} · Range ${Math.round(st.range)}`);
+  if(b.kind==="splash") facts.push(`Blast radius ${Math.round(st.splash)}`);
+  if(b.kind==="slow") facts.push(`Slows threats by ${Math.round(st.slow*100)}% · Range ${Math.round(st.range)}`);
+  if(b.kind==="bank") facts.push(`Earns ${Math.round(st.income)} gold after each wave`);
+  const syn=[...t.syn].map(s=>`<span class="chip" title="${COMBOS[s].effect}">${COMBOS[s].name}</span>`).join("");
+  const refund=Math.round(t.spent*0.7);
+  box.innerHTML=`<div class="eyebrow">Level ${t.level} of 3</div><h3>${b.name}</h3>
+    <p>${facts.join("<br>")}</p>${syn?`<p>${syn}</p>`:""}
+    <p class="muted">${b.hist}</p>
+    <div class="row">${t.level<3?`<button class="btn primary" id="upBtn">Upgrade (${upgradeCost(t)})</button>`:""}<button class="btn danger" id="sellBtn">Sell (+${refund})</button></div>`;
+  const up=$("upBtn"); if(up){ up.disabled=S.gold<upgradeCost(t); up.onclick=()=>{ const c=upgradeCost(t); if(S.gold<c) return; S.gold-=c; t.spent+=c; t.level++; renderSel(); updateHUD(); }; }
+  $("sellBtn").onclick=()=>{ S.gold+=refund; S.towers=S.towers.filter(x=>x!==t); selected=null; computeSynergy(false); renderSel(); updateHUD(); };
+}
+function renderSelLight(){ const up=$("upBtn"); const t=S.towers.find(x=>x.id===selected); if(up&&t) up.disabled=S.gold<upgradeCost(t); }
+
+// ---------- modal helpers ----------
+function openModal(html){ modal.innerHTML=html; overlay.hidden=false; const f=modal.querySelector("button, textarea, input"); if(f) f.focus({preventScroll:true}); modal.scrollTop=0; }
+function closeModal(){ overlay.hidden=true; modal.innerHTML=""; last=performance.now(); }
+const esc = s => String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function stimHTML(st){ return st ? `<div class="stim">${esc(st.text)}<span class="src">${esc(st.src)}</span></div>` : ""; }
+
+// ---------- question selection (spaced repetition) ----------
+function pickQuestion(){
+  const now=SAVE.qCount;
+  let best=null, bestScore=-1;
+  for(const q of QUESTIONS){
+    if(S.recent.includes(q.id)) continue;
+    const st=SAVE.q[q.id]; let score;
+    if(!st) score=100+Math.random()*20;
+    else if(st.streak===0 && now-st.last>=3) score=200+Math.random()*20;   // missed: bring it back soon
+    else score=50 - st.streak*12 + Math.min(30, now-st.last) + Math.random()*6;
+    if(score>bestScore){ bestScore=score; best=q; }
+  }
+  return best || QUESTIONS[Math.floor(Math.random()*QUESTIONS.length)];
+}
+function recordAnswer(q, right){
+  SAVE.qCount++;
+  const st = SAVE.q[q.id] || {seen:0, right:0, streak:0, last:0};
+  st.seen++; if(right){ st.right++; st.streak++; } else st.streak=0;
+  st.last=SAVE.qCount; SAVE.q[q.id]=st; persist();
+  S.recent.push(q.id); if(S.recent.length>4) S.recent.shift();
+  S.runAsked++; if(right) S.runRight++;
+}
+function askMCQ({eyebrow, reward, onDone}){
+  const q=pickQuestion();
+  const order=[0,1,2,3].sort(()=>Math.random()-0.5);
+  openModal(`<div class="eyebrow">${esc(eyebrow)}</div>
+    <h2>Read the source, pick the best answer</h2>
+    <div class="tags"><span class="tag">${esc(q.topic)}</span><span class="tag">Skill: ${esc(q.skill)}</span><span class="tag">Correct: +${reward} gold</span></div>
+    ${stimHTML(q.stim)}
+    <p class="qtext">${esc(q.q)}</p>
+    <div class="choices">${order.map((ci,i)=>`<button data-ci="${ci}"><b>${"ABCD"[i]}</b><span>${esc(q.c[ci])}</span></button>`).join("")}</div>
+    <div id="fb"></div>`);
+  modal.querySelectorAll(".choices button").forEach(btn=>btn.addEventListener("click",()=>{
+    const ci=+btn.dataset.ci, right=ci===q.a;
+    modal.querySelectorAll(".choices button").forEach(b=>{ b.disabled=true; if(+b.dataset.ci===q.a) b.classList.add("right"); });
+    if(!right) btn.classList.add("wrong");
+    recordAnswer(q,right);
+    if(right) S.gold+=reward;
+    $("fb").innerHTML=`<div class="feedback ${right?"ok":"no"}"><p><b>${right?`Correct. +${reward} gold.`:"Not quite. This question will come back later."}</b></p><p>${esc(q.ex)}</p></div>
+      <div class="actions"><button class="btn primary" id="cont">Continue</button></div>`;
+    $("cont").onclick=()=>{ closeModal(); updateHUD(); onDone && onDone(right); };
+    $("cont").focus();
+  }));
+}
+
+// ---------- SAQ ----------
+function askSAQ(id, onDone){
+  const s=SAQS[id];
+  const hasKey=!!getKey();
+  openModal(`<div class="eyebrow">Short-answer question · before wave ${S.wave+1}</div>
+    <h2>${esc(s.title)}</h2>
+    <p class="muted">Answer each part in one to three sentences. Reward: ${esc(s.reward)}. ${hasKey?"Claude will mark your answers.":"You will mark your answers against the scoring guide."}</p>
+    ${stimHTML(s.stim)}
+    ${s.parts.map(p=>`<label class="part" for="saq-${p.p}">(${p.p}) ${esc(p.q)}</label><textarea id="saq-${p.p}"></textarea>`).join("")}
+    <div class="actions"><button class="btn primary" id="saqSubmit">Submit answers</button></div>`);
+  $("saqSubmit").onclick=async ()=>{
+    const answers=s.parts.map(p=>$("saq-"+p.p).value.trim());
+    if(answers.some(a=>a.length<8)){ toast("Write something for every part first."); return; }
+    if(getKey()){
+      $("saqSubmit").disabled=true; $("saqSubmit").textContent="Marking…";
+      try{ const res=await gradeWithClaude(s, answers); showSAQResult(id, answers, res.map(r=>r.score?1:0), res.map(r=>r.feedback), onDone); }
+      catch(err){ selfMark(id, answers, onDone, `Claude couldn't mark this one (${esc(err.message)}). Mark it yourself below.`); }
+    } else selfMark(id, answers, onDone);
+  };
+}
+function selfMark(id, answers, onDone, note){
+  const s=SAQS[id];
+  openModal(`<div class="eyebrow">Mark your answers</div><h2>Check each part against the scoring guide</h2>
+    ${note?`<p class="muted">${note}</p>`:""}
+    <p class="muted">An AP reader gives 1 point per part if the answer does one of these things accurately and specifically. Be honest; this is how the real exam is scored.</p>
+    ${s.parts.map((p,i)=>`<div class="rubric"><b>(${p.p}) ${esc(p.q)}</b>
+      <div class="yours">${esc(answers[i])}</div>
+      <div class="muted" style="font-size:13px">Accepted answers include:</div><ul>${p.ok.map(o=>`<li>${esc(o)}</li>`).join("")}</ul>
+      <label><input type="checkbox" id="chk-${p.p}"> My answer earns this point</label></div>`).join("")}
+    <div class="actions"><button class="btn primary" id="markDone">Confirm score</button></div>`);
+  $("markDone").onclick=()=>{ const pts=s.parts.map(p=>$("chk-"+p.p).checked?1:0); showSAQResult(id, answers, pts, null, onDone, true); };
+}
+function showSAQResult(id, answers, pts, feedback, onDone, self){
+  const s=SAQS[id], total=pts.reduce((a,b)=>a+b,0);
+  SAVE.saq.push({id, date:new Date().toISOString().slice(0,10), score:total, by:self?"self":"Claude", answers}); persist();
+  let reward="";
+  if(id==="saq1"){ S.gold+=50*total; reward=`+${50*total} gold`; }
+  if(id==="saq2"){ S.gold+=30*total; S.bossMult=1-0.15*total; reward=`+${30*total} gold, and the Black Death starts ${15*total}% weaker`; }
+  openModal(`<div class="eyebrow">Short-answer result</div><h2>${total} of 3 points</h2>
+    <p><b>${total? "Reward: "+reward+"." : "No reward this time. Read the guide below and try to use it next time."}</b></p>
+    ${s.parts.map((p,i)=>`<div class="rubric"><b>(${p.p}) ${pts[i]?"1 point":"0 points"}</b>${feedback&&feedback[i]?`<p style="margin:4px 0">${esc(feedback[i])}</p>`:""}
+      <div class="muted" style="font-size:13px">A strong answer could say:</div><ul>${p.ok.slice(0,2).map(o=>`<li>${esc(o)}</li>`).join("")}</ul></div>`).join("")}
+    <div class="actions"><button class="btn primary" id="saqCont">Continue to wave ${S.wave+1}</button></div>`);
+  $("saqCont").onclick=()=>{ closeModal(); updateHUD(); onDone&&onDone(); };
+}
+async function gradeWithClaude(s, answers){
+  const system="You are an experienced AP World History: Modern exam reader. Score each part of a short-answer question 0 or 1 using College Board SAQ standards: 1 point if the response accurately and specifically does what the prompt asks (identify or explain) with relevant historical content from the right period; 0 if it is vague, inaccurate, off-period, or just restates the prompt. Be fair but not generous. Feedback: one or two plain sentences per part aimed at a 15-year-old, saying what earned or missed the point. Reply with JSON only: {\"parts\":[{\"score\":0,\"feedback\":\"...\"},{...},{...}]}";
+  const user = (s.stim?`Source: "${s.stim.text}" (${s.stim.src})\n\n`:"") + s.parts.map((p,i)=>`Part (${p.p}): ${p.q}\nExamples of acceptable answers: ${p.ok.join("; ")}\nStudent answer: ${answers[i]}`).join("\n\n");
+  const ctrl = new AbortController(); const timer=setTimeout(()=>ctrl.abort(), 30000);
+  const res = await fetch("https://api.anthropic.com/v1/messages", {method:"POST", signal:ctrl.signal,
+    headers:{"content-type":"application/json","x-api-key":getKey(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:MODEL, max_tokens:700, system, messages:[{role:"user", content:user}]})});
+  clearTimeout(timer);
+  if(!res.ok){ throw new Error(res.status===401?"the API key was rejected":"error "+res.status); }
+  const data=await res.json(); const text=(data.content||[]).map(c=>c.text||"").join("");
+  const json=JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}")+1));
+  if(!json.parts || json.parts.length<3) throw new Error("unexpected reply");
+  return json.parts.slice(0,3);
+}
+
+// ---------- flow ----------
+function startWave(){
+  if(S.running || S.wave>=10 || !overlay.hidden) return;
+  placing=null; renderShop();
+  const n=S.wave+1;
+  if(SAQ_WAVES[n]) askSAQ(SAQ_WAVES[n], beginWave);
+  else askMCQ({eyebrow:`Intelligence report · before wave ${n}`, reward:40, onDone:()=>beginWave()});
+}
+function study(){
+  if(S.running || S.studyLeft<=0 || !overlay.hidden) return;
+  S.studyLeft--; updateHUD();
+  askMCQ({eyebrow:"Study session", reward:25, onDone:()=>{}});
+}
+function discover(id){
+  const cb=COMBOS[id];
+  openModal(`<div class="eyebrow">Connection discovered</div><h2>${esc(cb.name)}</h2>
+    <p><b>${esc(TOWERS[cb.a].name)}</b> next to <b>${esc(TOWERS[cb.b].name)}</b>. ${esc(cb.effect)}</p>
+    <div class="feedback"><p>${esc(cb.why)}</p></div>
+    <p class="muted">Cause and effect is one of the three ways of reasoning the AP exam tests. Saved to your Codex.</p>
+    <div class="actions"><button class="btn primary" id="ok">Got it</button></div>`);
+  $("ok").onclick=closeModal;
+}
+function runAccuracy(){ return S.runAsked? Math.round(100*S.runRight/S.runAsked) : 0; }
+function victory(){
+  const acc=runAccuracy();
+  const stars = (S.trade>=15 && acc>=80) ? 3 : (S.trade>=8 || acc>=60) ? 2 : 1;
+  const lv = SAVE.levels[LEVEL_ID] || {stars:0, clears:0};
+  lv.stars=Math.max(lv.stars||0, stars); lv.clears=(lv.clears||0)+1; lv.bestTrade=Math.max(lv.bestTrade||0,S.trade); lv.lastClear=new Date().toISOString().slice(0,10);
+  SAVE.levels[LEVEL_ID]=lv; persist(); drop(SNAP_KEY);
+  openModal(`<div class="eyebrow">Unit 2 complete</div><h2>The Silk Roads held</h2>
+    <div class="stars" aria-label="${stars} of 3 stars">${"★".repeat(stars)}${"☆".repeat(3-stars)}</div>
+    <p>Trade left: <b>${S.trade}</b> of 20 · Questions right this run: <b>${S.runRight} of ${S.runAsked}</b> (${acc}%)</p>
+    <p class="muted">Three stars needs 15+ Trade and 80% of questions right. Questions you missed will come back first next time.</p>
+    <p class="muted">Next level, Unit 3: Land-Based Empires, is being built.</p>
+    <div class="actions"><button class="btn" id="prog">See progress</button><button class="btn primary" id="again">Play again</button></div>`);
+  $("again").onclick=()=>{ closeModal(); newRun(); };
+  $("prog").onclick=showProgress;
+}
+function gameOver(){
+  const sn=load(SNAP_KEY,null);
+  openModal(`<div class="eyebrow">Trade collapsed</div><h2>The road to Tana was cut on wave ${S.wave+1}</h2>
+    <p>Try more Caravanserai to slow threats down, and place Yam Stations next to Garrisons for the Pax Mongolica bonus.</p>
+    <div class="actions">${sn?`<button class="btn" id="retry">Retry wave ${sn.wave+1}</button>`:""}<button class="btn primary" id="restart">Restart level</button></div>`);
+  if(sn) $("retry").onclick=()=>{ closeModal(); restore(sn); };
+  $("restart").onclick=()=>{ closeModal(); newRun(); };
+}
+
+// ---------- menus ----------
+function showStart(){
+  const sn=load(SNAP_KEY,null), lv=SAVE.levels[LEVEL_ID];
+  openModal(`<div class="eyebrow">AP World History: Modern</div><h2>Chronicle Defense</h2>
+    <p>Defend the trade routes of world history. Every tower is a real development from the course, and you earn gold by answering exam-style questions.</p>
+    <div class="grid2">
+      <div class="levelcard"><div class="eyebrow">Unit 2 · Networks of Exchange</div><b>The Silk Roads, c. 1320</b>
+        <span class="muted">10 waves, ending with the Black Death${lv?` · Best: ${"★".repeat(lv.stars)}${"☆".repeat(3-lv.stars)}`:""}</span></div>
+      <div class="levelcard locked"><div class="eyebrow">Unit 3 · Land-Based Empires</div><b>Coming next</b><span class="muted">Gunpowder empires, 1450–1750</span></div>
+    </div>
+    <ul class="how">
+      <li>Build towers beside the road. Bandits, raiders and sandstorms travel west from Khanbaliq to Tana.</li>
+      <li>Before each wave you answer one source-based question. Right answers pay 40 gold.</li>
+      <li>Put related towers side by side to discover historical connections and bonuses.</li>
+      <li>Waves 5 and 10 open with a short-answer question, just like the real exam.</li>
+    </ul>
+    <p class="muted" style="font-size:13px">Your progress saves automatically in this browser. Keys: 1–5 pick a tower, Space starts a wave, Esc cancels.</p>
+    <div class="actions">${sn&&sn.level===LEVEL_ID?`<button class="btn" id="cont">Continue run (wave ${sn.wave+1})</button>`:""}<button class="btn primary" id="new">New run</button></div>`);
+  if(sn&&sn.level===LEVEL_ID) $("cont").onclick=()=>{ closeModal(); restore(sn); };
+  $("new").onclick=()=>{ closeModal(); newRun(); };
+}
+function showCodex(){
+  openModal(`<div class="eyebrow">Codex</div><h2>Towers and connections</h2>
+    <div class="grid2">${Object.values(TOWERS).map(b=>`<div class="levelcard"><b>${esc(b.name)}</b><span class="muted" style="font-size:13px">${esc(b.role)} · ${b.cost} gold</span><span style="font-size:14px">${esc(b.hist)}</span></div>`).join("")}</div>
+    <h3 style="font-family:var(--f-display);font-weight:400;font-size:20px;margin:18px 0 6px">Connections (${SAVE.combos.length} of ${Object.keys(COMBOS).length} found)</h3>
+    ${Object.entries(COMBOS).map(([id,cb])=>SAVE.combos.includes(id)
+      ? `<div class="rubric"><b>${esc(cb.name)}</b>: ${esc(TOWERS[cb.a].name)} + ${esc(TOWERS[cb.b].name)}<p style="margin:4px 0;font-size:14px">${esc(cb.why)}</p></div>`
+      : `<div class="rubric muted">Undiscovered. Try placing two towers that are historically linked side by side.</div>`).join("")}
+    <h3 style="font-family:var(--f-display);font-weight:400;font-size:20px;margin:18px 0 6px">Threats</h3>
+    <p style="font-size:14px"><b>Bandits and raiders</b> were a constant danger to caravans when no strong state policed the roads. <b>Sandstorms</b> stand for the deserts, such as the Taklamakan, that made overland travel slow and risky. <b>The Black Death</b> moved along these routes from Central Asia and reached the Black Sea ports by about 1346, then spread to Europe, the Middle East and North Africa.</p>
+    <div class="actions"><button class="btn primary" id="x">Close</button></div>`);
+  $("x").onclick=closeModal;
+}
+function showProgress(){
+  const rows={}, topics={};
+  let seen=0,right=0,mastered=0;
+  for(const q of QUESTIONS){
+    const st=SAVE.q[q.id]; if(!st) continue;
+    seen+=st.seen; right+=st.right; if(st.streak>=2) mastered++;
+    (rows[q.skill]=rows[q.skill]||{s:0,r:0}); rows[q.skill].s+=st.seen; rows[q.skill].r+=st.right;
+    (topics[q.topic]=topics[q.topic]||{s:0,r:0}); topics[q.topic].s+=st.seen; topics[q.topic].r+=st.right;
+  }
+  const pct=(r,s)=>s?Math.round(100*r/s):0;
+  const tbl=(obj,label)=>`<div class="tablewrap"><table class="stats"><thead><tr><th>${label}</th><th>Answered</th><th>Right</th><th style="width:30%"></th></tr></thead><tbody>${
+    Object.entries(obj).sort().map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v.s}</td><td>${pct(v.r,v.s)}%</td><td><div class="meter"><i style="width:${pct(v.r,v.s)}%"></i></div></td></tr>`).join("") || `<tr><td colspan="4" class="muted">No questions answered yet.</td></tr>`}</tbody></table></div>`;
+  const weak = QUESTIONS.filter(q=>SAVE.q[q.id] && SAVE.q[q.id].streak===0).map(q=>`<li>${esc(q.q)} <span class="muted">(${esc(q.topic)})</span></li>`).join("");
+  const lv=SAVE.levels[LEVEL_ID];
+  openModal(`<div class="eyebrow">Progress · saved in this browser</div><h2>How Adriano is doing</h2>
+    <div class="grid2">
+      <div class="levelcard"><span class="muted">Questions answered</span><b style="font-size:24px">${seen}</b></div>
+      <div class="levelcard"><span class="muted">Accuracy</span><b style="font-size:24px">${pct(right,seen)}%</b></div>
+      <div class="levelcard"><span class="muted">Mastered (right twice in a row)</span><b style="font-size:24px">${mastered} of ${QUESTIONS.length}</b></div>
+      <div class="levelcard"><span class="muted">Unit 2 level</span><b style="font-size:24px">${lv?`${"★".repeat(lv.stars)}${"☆".repeat(3-lv.stars)} · cleared ${lv.clears}×`:"Not cleared yet"}</b></div>
+    </div>
+    <h3 style="font-family:var(--f-display);font-weight:400;font-size:20px;margin:18px 0 6px">By exam skill</h3>${tbl(rows,"Skill")}
+    <h3 style="font-family:var(--f-display);font-weight:400;font-size:20px;margin:18px 0 6px">By topic</h3>${tbl(topics,"Topic")}
+    <h3 style="font-family:var(--f-display);font-weight:400;font-size:20px;margin:18px 0 6px">Short answers</h3>
+    ${SAVE.saq.length?`<div class="tablewrap"><table class="stats"><thead><tr><th>Date</th><th>Question</th><th>Score</th><th>Marked by</th></tr></thead><tbody>${SAVE.saq.slice(-8).reverse().map(a=>`<tr><td>${a.date}</td><td>${esc(SAQS[a.id].title.replace("Short answer: ",""))}</td><td>${a.score}/3</td><td>${a.by}</td></tr>`).join("")}</tbody></table></div>`:`<p class="muted">None yet. The first one comes before wave 5.</p>`}
+    ${weak?`<h3 style="font-family:var(--f-display);font-weight:400;font-size:20px;margin:18px 0 6px">Missed last time (coming back soon)</h3><ul class="how">${weak}</ul>`:""}
+    <h3 style="font-family:var(--f-display);font-weight:400;font-size:20px;margin:18px 0 6px">Move progress to another computer</h3>
+    <p class="muted" style="font-size:13.5px">Copy this save code, then paste it into the same box on the other computer and press Load.</p>
+    <textarea id="saveCode" readonly>${btoa(unescape(encodeURIComponent(JSON.stringify(SAVE))))}</textarea>
+    <div class="actions" style="justify-content:flex-start"><button class="btn" id="copyCode">Copy save code</button></div>
+    <label class="part" for="loadCode">Paste a save code</label><textarea id="loadCode"></textarea>
+    <div class="actions" style="justify-content:flex-start"><button class="btn" id="loadBtn">Load</button><span id="loadMsg" class="muted"></span></div>
+    <p class="muted" style="font-size:12.5px">Questions are written in AP format for practice. They are not official College Board questions.</p>
+    <div class="actions"><button class="btn primary" id="x">Close</button></div>`);
+  $("x").onclick=closeModal;
+  $("copyCode").onclick=()=>{ const ta=$("saveCode"); navigator.clipboard?.writeText(ta.value).then(()=>toast("Save code copied"),()=>{ ta.select(); toast("Press Ctrl+C to copy"); }) ?? (ta.select(), toast("Press Ctrl+C to copy")); };
+  $("loadBtn").onclick=()=>{
+    try{ const obj=JSON.parse(decodeURIComponent(escape(atob($("loadCode").value.trim())))); if(!obj||obj.version!==1) throw 0;
+      SAVE=Object.assign(freshSave(), obj); persist(); $("loadMsg").textContent="Loaded. Progress updated."; setTimeout(showProgress,600);
+    }catch(e){ $("loadMsg").textContent="That code didn't work. Copy the whole code and try again."; }
+  };
+}
+function showSettings(){
+  const k=getKey();
+  openModal(`<div class="eyebrow">Settings · for a parent</div><h2>Marking written answers with Claude</h2>
+    <p>With an Anthropic API key, Claude marks the short-answer questions against the College Board scoring rules and explains each point. Without one, Adriano marks his own answers against the scoring guide.</p>
+    <p class="muted" style="font-size:13.5px">The key is stored only in this browser on this computer. Create one at console.anthropic.com and set a monthly spending limit there. Each marked answer costs about a cent.</p>
+    <label class="part" for="apikey">API key</label><input type="password" id="apikey" placeholder="sk-ant-…" value="${esc(k)}" autocomplete="off">
+    <div class="actions" style="justify-content:flex-start"><button class="btn primary" id="saveKey">Save key</button>${k?`<button class="btn" id="delKey">Remove key</button>`:""}<span id="keyMsg" class="muted"></span></div>
+    <h3 style="font-family:var(--f-display);font-weight:400;font-size:20px;margin:22px 0 6px">Reset</h3>
+    <p class="muted" style="font-size:13.5px">Erases all progress, stars and question history in this browser.</p>
+    <div class="actions" style="justify-content:flex-start"><button class="btn danger" id="reset">Erase progress</button></div>
+    <div class="actions"><button class="btn primary" id="x">Close</button></div>`);
+  $("x").onclick=closeModal;
+  $("saveKey").onclick=()=>{ const v=$("apikey").value.trim(); try{ localStorage.setItem(KEY_KEY,v); $("keyMsg").textContent="Saved."; }catch(e){ $("keyMsg").textContent="This browser blocked saving. Try a normal (not private) window."; } };
+  if(k) $("delKey").onclick=()=>{ drop(KEY_KEY); showSettings(); };
+  let armed=false;
+  $("reset").onclick=()=>{ if(!armed){ armed=true; $("reset").textContent="Press again to erase everything"; return; } SAVE=freshSave(); persist(); drop(SNAP_KEY); closeModal(); newRun(); showStart(); };
+}
+
+// ---------- wiring ----------
+$("startBtn").onclick=startWave;
+$("studyBtn").onclick=study;
+$("speedBtn").onclick=()=>{ S.speed = S.speed===1?2:S.speed===2?3:1; $("speedBtn").textContent=S.speed+"×"; };
+$("codexBtn").onclick=showCodex; $("progressBtn").onclick=showProgress; $("settingsBtn").onclick=showSettings;
+$("menuBtn").onclick=()=>{ if(S.running){ toast("Finish the wave first. Your run saves after every wave."); return; } showStart(); };
+document.addEventListener("keydown", e=>{
+  if(!overlay.hidden || e.target.matches("textarea,input")) return;
+  if(e.code==="Space"){ e.preventDefault(); startWave(); }
+  else if(e.key==="Escape"){ placing=null; selected=null; renderShop(); renderSel(); }
+  else { const id=Object.keys(TOWERS).find(k=>TOWERS[k].key===e.key); if(id) selectTower(id); }
+});
+
+newRun(); SAVE.runs--; persist();
+showStart();
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
